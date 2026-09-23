@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>骰仔怪獸棋 v2 · Monster Dice</title>
+<style>
+  :root { --ink:#23324d; --card:rgba(255,255,255,.86); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; overflow:hidden; }
+  body { font-family:"Segoe UI","PingFang TC","Microsoft JhengHei",system-ui,sans-serif; color:var(--ink); background:#1c2333; }
+  #app { position:fixed; inset:0; }
+  #app canvas { display:block; }
+
+  .hud { position:fixed; z-index:10; pointer-events:none; }
+  .hud > * { pointer-events:auto; }
+
+  #hudTop { top:12px; left:0; right:0; display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
+  .chip { background:var(--card); backdrop-filter:blur(8px); border-radius:999px; padding:7px 14px; font-weight:800; font-size:14px;
+    box-shadow:0 6px 20px rgba(0,0,0,.35); white-space:nowrap; }
+  .chip.p { color:#1f5fd0; } .chip.e { color:#c22b48; }
+
+  #hint { position:fixed; top:56px; left:0; right:0; text-align:center; z-index:10; pointer-events:none; }
+  #hint span { display:inline-block; background:rgba(20,28,48,.75); color:#eaf1ff; backdrop-filter:blur(6px);
+    border-radius:999px; padding:6px 16px; font-size:13px; font-weight:600; }
+
+  /* 3 秒倒數 */
+  #countdown { position:fixed; top:92px; left:50%; transform:translateX(-50%); z-index:12;
+    display:none; flex-direction:column; align-items:center; gap:4px; pointer-events:none; }
+  #cdNum { font-size:44px; font-weight:900; color:#ffd166; text-shadow:0 3px 14px rgba(0,0,0,.55); }
+  #cdNum.urgent { color:#ff5252; animation:cdPulse .5s infinite; }
+  @keyframes cdPulse { 50% { transform:scale(1.25); } }
+  #cdBar { width:180px; height:8px; border-radius:99px; background:rgba(255,255,255,.22); overflow:hidden; }
+  #cdBar i { display:block; height:100%; width:100%; background:linear-gradient(90deg,#ffd166,#ff5252); }
+
+  #log { position:fixed; left:14px; top:110px; width:240px; z-index:9; display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  #log div { background:rgba(15,22,40,.62); color:#dfe8ff; border-left:3px solid #57a0ff; border-radius:8px;
+    padding:5px 9px; font-size:12px; line-height:1.45; animation:logIn .25s; }
+  #log div.e { border-left-color:#ff6a7d; }
+  @media (max-width:760px){ #log { display:none; } }
+
+  #hand { position:fixed; bottom:12px; left:0; right:0; display:flex; justify-content:center; gap:8px; z-index:11; padding:0 8px; flex-wrap:nowrap; overflow-x:auto; }
+  .die { min-width:88px; background:var(--card); backdrop-filter:blur(8px); border-radius:14px; padding:8px 6px 7px;
+    text-align:center; cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,.4); border:2px solid transparent;
+    transition:transform .12s, border-color .12s, opacity .2s; user-select:none; flex:0 0 auto; }
+  .die:hover { transform:translateY(-6px); border-color:#57a0ff; }
+  .die.disabled { opacity:.35; pointer-events:none; transform:none; }
+  .die.sel { border-color:#ffd166; transform:translateY(-6px); box-shadow:0 0 18px rgba(255,209,102,.55); }
+  .die .em { font-size:26px; line-height:1.1; }
+  .die .nm { font-size:12px; font-weight:800; margin:1px 0 2px; }
+  .die .role { display:inline-block; font-size:10px; font-weight:800; color:#fff; border-radius:6px; padding:1px 7px; margin-bottom:3px; }
+  .die .st { font-size:10.5px; color:#44557a; line-height:1.5; }
+  .die .sk { font-size:9.5px; color:#8a6a1f; background:#fff3cf; border-radius:6px; padding:2px 3px; margin-top:4px; line-height:1.35; }
+
+  #actions { position:fixed; bottom:128px; right:14px; z-index:11; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+  button.act { border:none; cursor:pointer; font-weight:800; font-size:14px; color:#fff;
+    background:linear-gradient(135deg,#ff8360,#ff6a88); padding:11px 18px; border-radius:999px;
+    box-shadow:0 6px 16px rgba(0,0,0,.45); transition:transform .12s; }
+  button.act:hover { transform:translateY(-2px); }
+  button.act.blue { background:linear-gradient(135deg,#57a0ff,#6f7dff); }
+  button.act.gray { background:linear-gradient(135deg,#9aa7bd,#7d8ba5); }
+
+  #banner { position:fixed; top:38%; left:0; right:0; text-align:center; z-index:30; pointer-events:none;
+    font-size:44px; font-weight:900; color:#fff; text-shadow:0 4px 24px rgba(0,0,0,.6); opacity:0; }
+  #banner.show { animation:ban 1.4s ease forwards; }
+  @keyframes ban { 15% { opacity:1; transform:scale(1.08); } 75% { opacity:1; } 100% { opacity:0; } }
+
+  #overlay, #netOverlay { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+    background:rgba(10,16,34,.55); backdrop-filter:blur(4px); }
+  .hidden { display:none !important; }
+  .cardO { background:#fff; border-radius:22px; padding:30px 36px; max-width:560px; width:calc(100% - 40px);
+    box-shadow:0 24px 60px rgba(0,0,0,.5); text-align:center; animation:pop .35s cubic-bezier(.2,1.4,.4,1); max-height:84vh; overflow:auto; }
+  @keyframes pop { from { transform:scale(.7); opacity:0; } }
+  .cardO .emoji { font-size:46px; }
+  .cardO h2 { font-size:24px; margin:6px 0 10px; }
+  .cardO .rules { text-align:left; font-size:13.5px; line-height:1.9; color:#3a4a6b; background:#f2f6ff;
+    border-radius:12px; padding:14px 18px; margin-bottom:16px; }
+  .cardO .rules b { color:#1f5fd0; }
+  .cardO .row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .cardO input { font-size:24px; font-weight:800; text-align:center; letter-spacing:4px; width:200px;
+    padding:10px 14px; border:3px solid #57a0ff; border-radius:14px; text-transform:uppercase; outline:none; }
+  .cardO .code { font-size:38px; font-weight:900; letter-spacing:6px; color:#1f5fd0; background:#eaf2ff;
+    border-radius:14px; padding:10px 24px; margin:10px 0; }
+  .cardO .status { font-size:14px; color:#5b6b8c; font-weight:600; margin-top:10px; }
+  .roleTag { display:inline-block; font-size:11px; font-weight:800; color:#fff; border-radius:6px; padding:2px 8px; margin:2px; }
+  #fatal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:99; background:#eef4fb; text-align:center; padding:30px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud" id="hudTop">
+  <div class="chip p" id="chipBossP">🐉 龍王 ❤️60/60</div>
+  <div class="chip" id="chipTurn">第 1 回合 · 你的擲骰</div>
+  <div class="chip e" id="chipBossE">😈 魔王 ❤️60/60</div>
+</div>
+
+<div id="hint"><span id="hintText">…</span></div>
+<div id="countdown"><div id="cdNum">3</div><div id="cdBar"><i id="cdBarFill"></i></div></div>
+<div id="log"></div>
+<div id="hand"></div>
+
+<div id="actions">
+  <button class="act gray" id="btnArc" style="display:none">↕ 彈道：低（滾輪調較）</button>
+  <button class="act blue" id="btnEnd" style="display:none">✔ 結束回合</button>
+  <button class="act gray" id="btnSkip" style="display:none">跳過擲骰 ➜</button>
+</div>
+
+<div id="banner"></div>
+
+<div id="overlay">
+  <div class="cardO">
+    <div class="emoji">🎲⚔️</div>
+    <h2>骰仔怪獸棋 v2</h2>
+    <div class="rules">
+      🎯 <b>目標：</b>沿住自己嘅<b>路徑</b>推進，打死對面嘅 Boss（龍王🐉 / 魔王👹）<br>
+      1️⃣ 每回合先<b>彈射一粒骰仔</b>（⏰ <b>3 秒內</b>要發射，有倒數）：撳手牌揀骰仔 → 喺自己半場空格<b>撳住拖曳</b>＝方位角（<b>360° 自由</b>）＋力度（1–6）；<b>滾輪/Q 調仰角</b>（5–80°，立體拋物線——45° 飛最遠、高角度短打）。骰仔沿真拋物線飛行，<b>落點撞到已有路徑／怪獸／邊界會反射彈開再飛一段</b>（能量遞減）。停低後<b>六面攤開</b>成路徑（有空間保證 6 格）<br>
+      2️⃣ 怪獸<b>只可以行喺自己藍色路徑上</b>（路徑會不斷鋪向對面），行完可以攻擊一次<br>
+      3️⃣ <b>30 隻骰怪</b>分五個兵種，開局隨機抽 5 隻，<b>每回合補抽 1 隻</b>；陣亡嘅骰怪唔會返手<br><br>
+      <span class="roleTag" style="background:#f4773b">近攻</span>高攻近戰 ·
+      <span class="roleTag" style="background:#d9a521">遠攻</span>隔 2–3 格射 ·
+      <span class="roleTag" style="background:#7f9cc0">防守</span>血厚·受傷−2 ·
+      <span class="roleTag" style="background:#4fae75">補給</span>補友軍血 ·
+      <span class="roleTag" style="background:#9c7bd0">輔助</span>隔籬友軍攻擊+2<br><br>
+      🖱️ 撳自己怪獸 → 綠格移動 · 紅圈敵人攻擊 · 補給兵撳綠圈友軍補血 · 撳自己完成行動
+    </div>
+    <div class="row">
+      <button class="act blue" id="btnSolo">👤 單機打 AI</button>
+      <button class="act" id="btnNetHost">🌐 開網上房間</button>
+      <button class="act gray" id="btnNetJoin">🔗 加入房間</button>
+    </div>
+    <div id="joinRow" class="hidden" style="margin-top:14px;">
+      <input id="roomInput" maxlength="5" placeholder="房間碼" />
+      <div class="row" style="margin-top:10px;">
+        <button class="act blue" id="btnJoinGo">連線 ➜</button>
+        <button class="act gray" id="btnJoinBack">返回</button>
+      </div>
+    </div>
+    <div class="status" id="netStatus"></div>
+  </div>
+</div>
+
+<div id="netOverlay" class="hidden">
+  <div class="cardO">
+    <div class="emoji">🌐</div>
+    <h2>網上對戰</h2>
+    <div class="code" id="roomCodeShow">…</div>
+    <div class="status" id="netStatus2">經營房間中…</div>
+    <div class="row" style="margin-top:16px;">
+      <button class="act gray" id="btnNetCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<div id="fatal"><div><h2>😢 你的瀏覽器不支援 WebGL</h2><p>請改用較新的 Chrome / Edge / Safari 開啟。</p></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+window.__errs = [];
+addEventListener('error', e => window.__errs.push(String(e.message)));
+addEventListener('unhandledrejection', e => window.__errs.push('P:' + String(e.reason)));
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ============================================================
+   資料定義
+   ============================================================ */
+const W = 9, H = 10;
+const ROLES = {
+  melee:  { label:'近攻', color:0xf4773b, shape:'cone'    , skill:'近戰猛將' },
+  ranged: { label:'遠攻', color:0xd9a521, shape:'capsule' , skill:'遠程攻擊' },
+  defense:{ label:'防守', color:0x7f9cc0, shape:'box'     , skill:'堅甲：受傷−2' },
+  supply: { label:'補給', color:0x4fae75, shape:'sphere'  , skill:'補血友軍' },
+  support:{ label:'輔助', color:0x9c7bd0, shape:'capsule2', skill:'鼓舞：隔籬友軍攻擊+2' },
+};
+const ROSTER = [
+  // 近攻 x6
+  { id:'sword',  role:'melee', name:'劍士',   emoji:'⚔️', hp:13, atk:7, move:2, range:1 },
+  { id:'ninja',  role:'melee', name:'刺客',   emoji:'🗡️', hp:10, atk:9, move:3, range:1 },
+  { id:'berserk',role:'melee', name:'狂戰士', emoji:'🪓', hp:14, atk:8, move:2, range:1 },
+  { id:'fist',   role:'melee', name:'拳師',   emoji:'🥊', hp:12, atk:7, move:2, range:1 },
+  { id:'hammer', role:'melee', name:'重錘兵', emoji:'🔨', hp:16, atk:8, move:1, range:1 },
+  { id:'wolf',   role:'melee', name:'狼騎兵', emoji:'🐺', hp:11, atk:6, move:3, range:1 },
+  // 遠攻 x6
+  { id:'archer', role:'ranged',name:'弓箭手', emoji:'🏹', hp:9,  atk:6, move:2, range:2 },
+  { id:'pyro',   role:'ranged',name:'焰法師', emoji:'🔥', hp:8,  atk:8, move:2, range:2 },
+  { id:'ice',    role:'ranged',name:'冰巫',   emoji:'❄️', hp:9,  atk:7, move:1, range:3 },
+  { id:'thunder',role:'ranged',name:'雷使者', emoji:'⚡', hp:8,  atk:8, move:1, range:2 },
+  { id:'cannon', role:'ranged',name:'炮手',   emoji:'🧨', hp:10, atk:9, move:1, range:3 },
+  { id:'star',   role:'ranged',name:'星術士', emoji:'⭐', hp:8,  atk:6, move:2, range:3 },
+  // 防守 x6
+  { id:'shield', role:'defense',name:'盾衛',   emoji:'🛡️', hp:24, atk:4, move:1, range:1 },
+  { id:'turtle', role:'defense',name:'龜甲衛', emoji:'🐢', hp:30, atk:3, move:1, range:1 },
+  { id:'wall',   role:'defense',name:'城牆兵', emoji:'🏰', hp:26, atk:4, move:1, range:1 },
+  { id:'golem',  role:'defense',name:'石魔',   emoji:'🪨', hp:22, atk:5, move:1, range:1 },
+  { id:'rhino',  role:'defense',name:'犀甲兵', emoji:'🦏', hp:25, atk:4, move:2, range:1 },
+  { id:'mecha',  role:'defense',name:'機械衛', emoji:'⚙️', hp:28, atk:3, move:1, range:1 },
+  // 補給 x6
+  { id:'priest', role:'supply',name:'牧師',   emoji:'💚', hp:12, atk:5, move:2, range:1 },
+  { id:'alchem', role:'supply',name:'煉金師', emoji:'🧪', hp:11, atk:6, move:2, range:1 },
+  { id:'flower', role:'supply',name:'花仙子', emoji:'🌸', hp:10, atk:4, move:3, range:1 },
+  { id:'sun',    role:'supply',name:'日祭司', emoji:'☀️', hp:12, atk:6, move:1, range:2 },
+  { id:'carrot', role:'supply',name:'藥蘿蔔', emoji:'🥕', hp:11, atk:5, move:2, range:1 },
+  { id:'clover', role:'supply',name:'幸運僧', emoji:'🍀', hp:12, atk:4, move:2, range:2 },
+  // 輔助 x6
+  { id:'horn',   role:'support',name:'號角手', emoji:'🎺', hp:12, atk:4, move:2, range:1 },
+  { id:'flag',   role:'support',name:'旗手',   emoji:'🚩', hp:13, atk:3, move:2, range:1 },
+  { id:'drum',   role:'support',name:'鼓手',   emoji:'🥁', hp:11, atk:4, move:2, range:1 },
+  { id:'wand',   role:'support',name:'魔導士', emoji:'🪄', hp:10, atk:3, move:2, range:1 },
+  { id:'herald', role:'support',name:'傳令兵', emoji:'📯', hp:11, atk:3, move:3, range:1 },
+  { id:'bard',   role:'support',name:'詩人',   emoji:'🎵', hp:10, atk:2, move:2, range:1 },
+];
+const ROSTER_MAP = Object.fromEntries(ROSTER.map(r => [r.id, r]));
+const BOSS_DEF = {
+  P: { name:'龍王', emoji:'🐉', color:0x4f8ef7, hp:60, atk:6, range:1 },
+  E: { name:'魔王', emoji:'👹', color:0xd84860, hp:60, atk:6, range:1 },
+};
+const MAX_BOARD_UNITS = 6, HAND_CAP = 8, START_DRAW = 5, TURN_DRAW = 1;
+
+/* 骰面路徑圖案（df = 沿彈射方向格數, dx = 橫移格數；每面 5 格 + 錨點 = 六面全開） */
+const PATH_FACES = [
+  { name:'長軸', cells:[[0,1],[0,2],[0,3],[0,4],[0,-1]] },
+  { name:'寬路', cells:[[0,1],[0,2],[-1,1],[1,1],[0,3]] },
+  { name:'曲尺', cells:[[0,1],[0,2],[1,2],[2,2],[2,1]] },
+  { name:'十字', cells:[[0,1],[0,-1],[-1,0],[1,0],[0,2]] },
+  { name:'之字', cells:[[0,1],[-1,1],[-1,2],[-2,2],[-2,3]] },
+  { name:'丁字', cells:[[0,1],[0,2],[-1,2],[1,2],[0,3]] },
+];
+const ownHalfOk = (side, z) => side === 'P' ? z >= H-5 : z <= 4;
+
+const key = (x,z) => x + ',' + z;
+const world = (x,z) => ({ x: x-(W-1)/2, z: z-(H-1)/2 });
+const manh = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.z-b.z);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const shuffle = a => { for(let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; };
+
+/* ============================================================
+   音效
+   ============================================================ */
+const SFX = (() => {
+  let ctx = null;
+  const api = {
+    muted:false,
+    ensure(){ if(!ctx){ try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+      if(ctx && ctx.state==='suspended') ctx.resume(); },
+    tone(f0, f1, dur, type='sine', vol=.12){
+      if(api.muted || !ctx) return;
+      const t = ctx.currentTime;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20,f1), t+dur);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t+dur+.02);
+    },
+    throwD(){ api.tone(700, 220, .4, 'triangle', .08); },
+    pop(){ api.tone(300, 720, .16, 'sine', .12); },
+    spawn(){ api.tone(400, 900, .3, 'triangle', .12); api.tone(600, 1200, .25, 'sine', .08); },
+    path(){ api.tone(500, 780, .12, 'triangle', .08); },
+    hit(){ api.tone(200, 70, .16, 'square', .12); },
+    zap(){ api.tone(1100, 240, .22, 'sawtooth', .08); },
+    heal(){ api.tone(500, 880, .25, 'sine', .1); },
+    die(){ api.tone(320, 50, .4, 'sawtooth', .11); },
+    step(){ api.tone(350, 300, .05, 'triangle', .05); },
+    win(){ [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>api.tone(f,f,.22,'sine',.12), i*110)); },
+    lose(){ [392,330,262,196].forEach((f,i)=>setTimeout(()=>api.tone(f,f*.9,.3,'sine',.12), i*160)); },
+  };
+  return api;
+})();
+
+/* ============================================================
+   Three.js 場景
+   ============================================================ */
+const app = document.getElementById('app');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ antialias:true }); }
+catch(e){ document.getElementById('fatal').style.display = 'flex'; throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x27314c);
+scene.fog = new THREE.Fog(0x27314c, 26, 52);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, .1, 200);
+camera.position.set(0, 16.5, 14.5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.enablePan = false;
+controls.maxPolarAngle = Math.PI/2.25;
+controls.minDistance = 5; controls.maxDistance = 34;
+controls.target.set(0, 0, .5);
+
+scene.add(new THREE.HemisphereLight(0xfff6e5, 0x39435e, .95));
+const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+sun.position.set(8, 17, 7);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0005;
+const sc = sun.shadow.camera;
+sc.left=-10; sc.right=10; sc.top=11; sc.bottom=-11;
+scene.add(sun, sun.target);
+
+const fxGroup = new THREE.Group(); scene.add(fxGroup);
+const boardGroup = new THREE.Group(); scene.add(boardGroup);
+const pathGroup = new THREE.Group(); scene.add(pathGroup);
+
+function buildBoard(){
+  const geo = new THREE.BoxGeometry(.98, .24, .98);
+  for(let z = 0; z < H; z++) for(let x = 0; x < W; x++){
+    const enemySide = z < H/2;
+    const [a, b] = enemySide ? [0xc3d2ea, 0xb4c6e4] : [0xf0d9b8, 0xe6cca4];
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color:(x+z)%2 ? a : b, roughness:.9 }));
+    const p = world(x,z);
+    m.position.set(p.x, -.12, p.z);
+    m.receiveShadow = true;
+    boardGroup.add(m);
+  }
+  const frame = new THREE.Mesh(
+    new THREE.BoxGeometry(W+.7, .3, H+.7),
+    new THREE.MeshStandardMaterial({ color:0x2c3654, roughness:.8 }));
+  frame.position.y = -.32;
+  frame.receiveShadow = true;
+  boardGroup.add(frame);
+  for(const [side, x, z] of [['P', 4, H-1], ['E', 4, 0]]){
+    const pad = new THREE.Mesh(
+      new THREE.CylinderGeometry(.46, .52, .1, 28),
+      new THREE.MeshStandardMaterial({ color: side==='P'?0x3f7cff:0xff5566,
+        emissive: side==='P'?0x2b5fd7:0xd73550, emissiveIntensity:.55, roughness:.4 }));
+    const p = world(x,z);
+    pad.position.set(p.x, .05, p.z);
+    pad.userData.pulse = true;
+    boardGroup.add(pad);
+  }
+}
+buildBoard();
+
+/* ============================================================
+   tween 系統
+   ============================================================ */
+const tweens = new Set();
+function tweenP(dur, onU){
+  return new Promise(res => { tweens.add({ start: performance.now(), dur, onU, onC: res }); });
+}
+function stepTweens(now){
+  for(const tw of [...tweens]){
+    let k = (now - tw.start) / tw.dur;
+    if(k >= 1) k = 1;
+    const e = 1 - (1-k)*(1-k);
+    tw.onU(e);
+    if(k === 1){ tweens.delete(tw); tw.onC(); }
+  }
+}
+
+/* ============================================================
+   canvas 精靈
+   ============================================================ */
+function canvasSprite(w, h, scaleW){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent:true, depthTest:false }));
+  spr.scale.set(scaleW, scaleW*h/w, 1);
+  return { spr, c, tex,
+    redraw(draw){ const ctx = c.getContext('2d'); ctx.clearRect(0,0,w,h); draw(ctx); tex.needsUpdate = true; } };
+}
+function emojiBadge(emoji, size){
+  const b = canvasSprite(96, 96, size);
+  b.redraw(ctx => {
+    ctx.font = '600 58px "Segoe UI Emoji","Apple Color Emoji",serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 48, 52);
+  });
+  return b.spr;
+}
+function makeHpBar(u){
+  const wide = u.type === 'boss';
+  const b = canvasSprite(150, 54, wide ? 1.5 : 1.05);
+  const draw = () => b.redraw(ctx => {
+    ctx.fillStyle = 'rgba(15,22,40,.8)';
+    roundRect(ctx, 4, 4, 142, 24, 12); ctx.fill();
+    const p = Math.max(0, u.hp / u.maxHp);
+    ctx.fillStyle = p > .5 ? '#4cd964' : p > .25 ? '#ffcc00' : '#ff5252';
+    if(p > 0){ roundRect(ctx, 8, 8, 134*p, 16, 8); ctx.fill(); }
+    ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 3;
+    ctx.strokeText(`${u.hp}/${u.maxHp}`, 75, 48);
+    ctx.fillText(`${u.hp}/${u.maxHp}`, 75, 48);
+  });
+  draw();
+  u.redrawHp = draw;
+  return b.spr;
+}
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+const popups = [];
+function popup(unit, text, color){
+  const b = canvasSprite(140, 64, 1);
+  b.redraw(ctx => {
+    ctx.font = '900 44px sans-serif'; ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 7;
+    ctx.strokeText(text, 70, 46);
+    ctx.fillStyle = color; ctx.fillText(text, 70, 46);
+  });
+  b.spr.position.copy(unit.group.position);
+  b.spr.position.y += (unit.type==='boss' ? 2.1 : 1.35);
+  fxGroup.add(b.spr);
+  popups.push({ spr: b.spr, life: .95 });
+}
+function updatePopups(dt){
+  for(let i = popups.length-1; i >= 0; i--){
+    const p = popups[i];
+    p.life -= dt;
+    p.spr.position.y += dt*1.4;
+    p.spr.material.opacity = Math.min(1, p.life/.5);
+    if(p.life <= 0){
+      fxGroup.remove(p.spr);
+      p.spr.material.map.dispose(); p.spr.material.dispose();
+      popups.splice(i,1);
+    }
+  }
+}
+const puffs = [];
+function puff(pos, color=0xcfd8e8, n=10){
+  for(let i = 0; i < n; i++){
+    const m = new THREE.Mesh(new THREE.SphereGeometry(.09, 8, 8),
+      new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.9 }));
+    m.position.copy(pos); m.position.y += .4;
+    puffs.push({ m, v:new THREE.Vector3((Math.random()-.5)*3, 1+Math.random()*2, (Math.random()-.5)*3), life:.7 });
+    fxGroup.add(m);
+  }
+}
+function updatePuffs(dt){
+  for(let i = puffs.length-1; i >= 0; i--){
+    const p = puffs[i];
+    p.life -= dt;
+    p.v.y -= 4*dt;
+    p.m.position.addScaledVector(p.v, dt);
+    p.m.scale.setScalar(Math.max(.01, p.life/.7));
+    p.m.material.opacity = p.life/.7;
+    if(p.life <= 0){ fxGroup.remove(p.m); p.m.geometry.dispose(); p.m.material.dispose(); puffs.splice(i,1); }
+  }
+}
+
+/* ============================================================
+   怪獸模型（按兵種）
+   ============================================================ */
+const eyeMatW = new THREE.MeshStandardMaterial({ color:0xffffff, roughness:.3 });
+const eyeMatB = new THREE.MeshStandardMaterial({ color:0x1c2333, roughness:.3 });
+eyeMatW.userData.shared = true; eyeMatB.userData.shared = true;
+function addEyes(g, y, z, dx, r=.06){
+  const w1 = new THREE.Mesh(new THREE.SphereGeometry(r*1.55, 10, 10), eyeMatW);
+  w1.position.set(-dx, y, z);
+  const w2 = w1.clone(); w2.position.x = dx;
+  const b1 = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 8), eyeMatB);
+  b1.position.set(-dx, y, z+r*.9);
+  const b2 = b1.clone(); b2.position.x = dx;
+  g.add(w1, w2, b1, b2);
+}
+function buildMonsterBody(role, colorHex){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness:.5 });
+  if(role === 'melee'){
+    const body = new THREE.Mesh(new THREE.ConeGeometry(.3, .62, 16), mat);
+    body.position.y = .36;
+    const sword = new THREE.Mesh(new THREE.BoxGeometry(.06, .5, .06),
+      new THREE.MeshStandardMaterial({ color:0xdfe6f2, metalness:.6, roughness:.3 }));
+    sword.position.set(.3, .5, .05); sword.rotation.z = -.5;
+    g.add(body, sword);
+    addEyes(g, .48, .18, .11);
+  } else if(role === 'ranged'){
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(.22, .22, 6, 14), mat);
+    body.position.y = .4;
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, .7, 8),
+      new THREE.MeshStandardMaterial({ color:0x8a6a3f }));
+    staff.position.set(.26, .45, 0);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(.07, 10, 10),
+      new THREE.MeshStandardMaterial({ color:0xffe08a, emissive:0xffc040, emissiveIntensity:.9 }));
+    orb.position.set(.26, .83, 0);
+    g.add(body, staff, orb);
+    addEyes(g, .48, .18, .1, .05);
+  } else if(role === 'defense'){
+    const body = new THREE.Mesh(new RoundedBoxGeometry(.56, .5, .56, 3, .1), mat);
+    body.position.y = .28;
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .06, 18),
+      new THREE.MeshStandardMaterial({ color:0xf2f4f8, metalness:.3, roughness:.5 }));
+    shield.rotation.x = Math.PI/2; shield.position.set(0, .3, .3);
+    g.add(body, shield);
+    addEyes(g, .36, .26, .12);
+  } else if(role === 'supply'){
+    const body = new THREE.Mesh(new THREE.SphereGeometry(.32, 20, 16), mat);
+    body.position.y = .32;
+    const c1 = new THREE.Mesh(new THREE.BoxGeometry(.22, .07, .07),
+      new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0x66ff99, emissiveIntensity:.4 }));
+    c1.position.set(0, .34, .3);
+    const c2 = c1.clone(); c2.rotation.z = Math.PI/2;
+    g.add(body, c1, c2);
+    addEyes(g, .42, .25, .12);
+  } else { // support
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(.22, .2, 6, 14), mat);
+    body.position.y = .4;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, .6, 8),
+      new THREE.MeshStandardMaterial({ color:0xc9c9c9 }));
+    pole.position.set(-.24, .5, 0);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(.24, .16),
+      new THREE.MeshStandardMaterial({ color:0xffd166, side:THREE.DoubleSide, emissive:0xffae00, emissiveIntensity:.3 }));
+    flag.position.set(-.11, .72, 0);
+    g.add(body, pole, flag);
+    addEyes(g, .48, .18, .1, .05);
+  }
+  g.traverse(o => { if(o.isMesh) o.castShadow = true; });
+  return g;
+}
+function buildBossBody(colorHex){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness:.45 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(.5, 24, 18), mat);
+  body.position.y = .52; body.scale.set(1, 1.1, 1);
+  const crown = new THREE.Group();
+  const gold = new THREE.MeshStandardMaterial({ color:0xffd166, emissive:0xffae00, emissiveIntensity:.5, roughness:.35 });
+  for(let i = 0; i < 4; i++){
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(.07, .2, 6), gold);
+    const a = i/4 * Math.PI*2;
+    spike.position.set(Math.cos(a)*.2, .12, Math.sin(a)*.2);
+    crown.add(spike);
+  }
+  crown.position.y = 1.08;
+  const horn1 = new THREE.Mesh(new THREE.ConeGeometry(.08, .3, 8),
+    new THREE.MeshStandardMaterial({ color:0xf2f4f8, roughness:.4 }));
+  horn1.position.set(-.34, .82, -.1); horn1.rotation.z = .7;
+  const horn2 = horn1.clone(); horn2.position.x = .34; horn2.rotation.z = -.7;
+  g.add(body, crown, horn1, horn2);
+  addEyes(g, .66, .4, .18, .075);
+  g.traverse(o => { if(o.isMesh) o.castShadow = true; });
+  return g;
+}
+function buildDieMesh(rosterId){
+  const T = ROSTER_MAP[rosterId];
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#' + new THREE.Color(ROLES[T.role].color).getHexString();
+  roundRect(ctx, 6, 6, 116, 116, 22); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.font = '600 64px "Segoe UI Emoji","Apple Color Emoji",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(T.emoji, 64, 70);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const die = new THREE.Mesh(new RoundedBoxGeometry(.52, .52, .52, 3, .1),
+    new THREE.MeshStandardMaterial({ map: tex, roughness:.4 }));
+  die.castShadow = true;
+  return die;
+}
+
+/* ============================================================
+   遊戲狀態
+   ============================================================ */
+let uidSeq = 1;
+const G = {
+  mode: null,        // 'solo' | 'online'
+  mySide: 'P',       // online: 自己嗰邊（host=P, guest=E）
+  isHost: true,
+  phase: 'menu',     // menu | throw | act | ai | over
+  turnSide: 'P',
+  turn: 1,
+  units: [],
+  hands: { P: [], E: [] },
+  decks: { P: [], E: [] },
+  paths: { P: new Set(), E: new Set() },
+  selected: null,
+  moveSet: new Map(),
+  busy: false,
+  over: false,
+};
+
+const unitAt = (x, z) => G.units.find(u => u.alive && u.x === x && u.z === z) || null;
+const byUid = id => G.units.find(u => u.uid === id) || null;
+const inBoard = (x, z) => x >= 0 && x < W && z >= 0 && z < H;
+const myUnitsOnBoard = side => G.units.filter(u => u.alive && u.side === side && u.type !== 'boss').length;
+function freeCells(side){
+  const rows = side === 'P' ? [H-5, H-1] : [0, 4];
+  const out = [];
+  for(let z = rows[0]; z <= rows[1]; z++) for(let x = 0; x < W; x++){
+    if(unitAt(x, z)) continue;
+    if(G.paths[side === 'P' ? 'E' : 'P'].has(key(x, z))) continue;  // 唔可以跌落敵方路徑上
+    out.push({ x, z });
+  }
+  return out;
+}
+function drawDice(side, n){
+  for(let i = 0; i < n; i++){
+    if(G.hands[side].length >= HAND_CAP || !G.decks[side].length) break;
+    G.hands[side].push(G.decks[side].pop());
+  }
+}
+
+/* 路徑 tile 渲染 */
+const pathTileMeshes = new Map();   // key -> mesh（兩邊共用一格時疊兩塊薄 tile）
+function renderPathTiles(){
+  for(const m of pathTileMeshes.values()) pathGroup.remove(m);
+  pathTileMeshes.clear();
+  const geo = new THREE.PlaneGeometry(.94, .94);
+  for(const side of ['P', 'E']){
+    const col = side === 'P' ? 0x3f7cff : 0xff5566;
+    let i = 0;
+    for(const k of G.paths[side]){
+      const [x, z] = k.split(',').map(Number);
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: col, transparent: true, opacity: side === 'P' ? .4 : .34, depthWrite: false }));
+      m.rotation.x = -Math.PI/2;
+      const p = world(x, z);
+      m.position.set(p.x, .5 + (side === 'P' ? 0 : .002), p.z);
+      pathGroup.add(m);
+      pathTileMeshes.set(side + k, m);
+      i++;
+    }
+  }
+}
+/* F = 彈射方向（4 向單位向量）；保證有空間時開足六面 */
+function stampPath(side, anchor, face, F){
+  const L = { x: F.z, z: -F.x };   // 垂直於彈射方向
+  const foe = G.paths[side === 'P' ? 'E' : 'P'];
+  const mine = G.paths[side];
+  const added = [];
+  const tryAdd = (x, z) => {
+    if(!inBoard(x, z)) return false;
+    const k = key(x, z);
+    if(foe.has(k) || mine.has(k)) return false;
+    mine.add(k); added.push({ x, z });
+    return true;
+  };
+  tryAdd(anchor.x, anchor.z);
+  for(const [dx0, df] of face.cells){
+    const dx = face.flip ? -dx0 : dx0;
+    const x = anchor.x + dx*L.x + df*F.x;
+    const z = anchor.z + dx*L.z + df*F.z;
+    if(!tryAdd(x, z)){
+      // 嗰格俾人霸咗／出界 → 喺隔籵搵最近空格補位，確保開足六面
+      for(const [cx, cz] of [[x+F.x, z+F.z], [x+1,z], [x-1,z], [x,z+1], [x,z-1]]){
+        if(tryAdd(cx, cz)) break;
+      }
+    }
+  }
+  return added;
+}
+async function revealPathTiles(added){
+  if(!added.length) return;
+  SFX.path();
+  for(let i = 0; i < added.length; i++){
+    const c = added[i], p = world(c.x, c.z);
+    const ring = new THREE.Mesh(new THREE.PlaneGeometry(.94, .94),
+      new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:.8, depthWrite:false }));
+    ring.rotation.x = -Math.PI/2; ring.position.set(p.x, .52, p.z);
+    fxGroup.add(ring);
+    tweenP(420, e => { ring.material.opacity = .8*(1-e); ring.scale.setScalar(1 + e*.4); })
+      .then(() => { fxGroup.remove(ring); ring.geometry.dispose(); ring.material.dispose(); });
+    await wait(90);
+  }
+}
+
+/* ============================================================
+   單位
+   ============================================================ */
+function spawnUnit(side, typeKey, x, z, uid){
+  const isBoss = typeKey === 'boss';
+  const def = isBoss ? BOSS_DEF[side] : ROSTER_MAP[typeKey];
+  const u = {
+    uid: uid || uidSeq++,
+    side, type: typeKey,
+    role: isBoss ? 'boss' : def.role,
+    x, z, hp: def.hp, maxHp: def.hp, atk: def.atk,
+    move: isBoss ? 0 : def.move, range: def.range,
+    acted: false, moved: false, alive: true,
+  };
+  const group = new THREE.Group();
+  const p = world(x, z);
+  group.position.set(p.x, 0, p.z);
+  const bodyG = isBoss ? buildBossBody(def.color) : buildMonsterBody(u.role, ROLES[u.role].color);
+  group.add(bodyG);
+  u.bodyG = bodyG;
+  u.yaw = side === 'P' ? Math.PI : 0;
+  u.targetYaw = u.yaw;
+  bodyG.rotation.y = u.yaw;
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(isBoss ? .62 : .4, .045, 10, 32),
+    new THREE.MeshBasicMaterial({ color: side==='P' ? 0x3f7cff : 0xff5566 }));
+  ring.rotation.x = -Math.PI/2; ring.position.y = .04;
+  group.add(ring);
+  u.barY = isBoss ? 1.75 : 1.1;
+  const hpSpr = makeHpBar(u);
+  hpSpr.position.y = u.barY;
+  group.add(hpSpr);
+  const badge = emojiBadge(def.emoji, isBoss ? .62 : .44);
+  badge.position.y = u.barY + .5;
+  group.add(badge);
+  const stamp = new THREE.Mesh(
+    new THREE.CylinderGeometry(.13, .13, .04, 16),
+    new THREE.MeshBasicMaterial({ color:0x8a93a8, transparent:true, opacity:.85 }));
+  stamp.position.y = u.barY + .92; stamp.visible = false;
+  group.add(stamp);
+  u.stampMesh = stamp;
+  scene.add(group);
+  u.group = group;
+  G.units.push(u);
+  return u;
+}
+function setupGame(){
+  G.turn = 1; G.turnSide = 'P'; G.phase = 'throw'; G.over = false;
+  G.units = [];
+  G.decks = { P: shuffle(ROSTER.map(r => r.id)), E: shuffle(ROSTER.map(r => r.id)) };
+  G.hands = { P: [], E: [] };
+  drawDice('P', START_DRAW); drawDice('E', START_DRAW);
+  G.paths = { P: new Set(), E: new Set() };
+  renderPathTiles();
+  spawnUnit('P', 'boss', 4, H-1);
+  spawnUnit('E', 'boss', 4, 0);
+  updateChips();
+}
+
+/* ============================================================
+   高亮
+   ============================================================ */
+const moveTiles = [];
+for(let i = 0; i < 30; i++){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.9, .9),
+    new THREE.MeshBasicMaterial({ color:0x39d98a, transparent:true, opacity:.4, depthWrite:false }));
+  m.rotation.x = -Math.PI/2; m.position.y = .54; m.visible = false;
+  scene.add(m); moveTiles.push(m);
+}
+const targetRings = [];
+for(let i = 0; i < 14; i++){
+  const m = new THREE.Mesh(new THREE.TorusGeometry(.44, .055, 10, 32),
+    new THREE.MeshBasicMaterial({ color:0xff4d5e, transparent:true, opacity:.9 }));
+  m.rotation.x = -Math.PI/2; m.position.y = .06; m.visible = false;
+  scene.add(m); targetRings.push(m);
+}
+function actionTargets(u){
+  if(u.role === 'supply'){
+    return G.units.filter(t => t.alive && t.side === u.side && t !== u && manh(u, t) <= u.range);
+  }
+  return G.units.filter(t => t.alive && t.side !== u.side && manh(u, t) <= u.range);
+}
+function showHighlights(u){
+  clearHighlights();
+  if(!u) return;
+  let ti = 0;
+  if(!u.moved && u.move > 0){
+    G.moveSet = bfsReach(u);
+    for(const k of G.moveSet.keys()){
+      if(ti >= moveTiles.length) break;
+      const [x, z] = k.split(',').map(Number);
+      const p = world(x, z);
+      moveTiles[ti].position.x = p.x; moveTiles[ti].position.z = p.z;
+      moveTiles[ti].visible = true;
+      ti++;
+    }
+  } else G.moveSet = new Map();
+  let ri = 0;
+  const heal = u.role === 'supply';
+  for(const t of actionTargets(u)){
+    if(ri >= targetRings.length) break;
+    const p = world(t.x, t.z);
+    targetRings[ri].material.color.setHex(heal ? 0x39d98a : 0xff4d5e);
+    targetRings[ri].position.x = p.x; targetRings[ri].position.z = p.z;
+    targetRings[ri].visible = true;
+    ri++;
+  }
+  if(heal && !u.moved) setHint('綠格=移動 · 綠圈友軍=補血（補到自己 Boss 都得）');
+}
+function clearHighlights(){
+  moveTiles.forEach(m => m.visible = false);
+  targetRings.forEach(m => m.visible = false);
+  G.moveSet = new Map();
+}
+/* BFS：只可以行自己路徑 */
+function bfsReach(u){
+  const myPaths = G.paths[u.side];
+  if(!myPaths.has(key(u.x, u.z))) return new Map();
+  const res = new Set();
+  const start = key(u.x, u.z);
+  const prev = new Map([[start, null]]);
+  const q = [{ x:u.x, z:u.z, d:0 }];
+  while(q.length){
+    const c = q.shift();
+    if(c.d >= u.move) continue;
+    for(const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx = c.x+dx, nz = c.z+dz, nk = key(nx, nz);
+      if(!inBoard(nx, nz) || prev.has(nk) || unitAt(nx, nz)) continue;
+      if(!myPaths.has(nk)) continue;
+      prev.set(nk, key(c.x, c.z));
+      res.add(nk);
+      q.push({ x:nx, z:nz, d:c.d+1 });
+    }
+  }
+  const paths = new Map();
+  for(const k of res){
+    const path = [];
+    let cur = k;
+    while(cur !== start){
+      const [x, z] = cur.split(',').map(Number);
+      path.unshift({ x, z });
+      cur = prev.get(cur);
+    }
+    paths.set(k, path);
+  }
+  return paths;
+}
+
+/* ============================================================
+   動作動畫
+   ============================================================ */
+async function animMove(u, path){
+  for(const step of path){
+    const from = u.group.position.clone();
+    const to = world(step.x, step.z);
+    u.targetYaw = Math.atan2(to.x-from.x, to.z-from.z);
+    u.x = step.x; u.z = step.z;
+    SFX.step();
+    await tweenP(140, e => {
+      u.group.position.set(from.x + (to.x-from.x)*e, Math.sin(e*Math.PI)*.16, from.z + (to.z-from.z)*e);
+    });
+  }
+}
+function flashUnit(u, hex=0xff3030){
+  u.bodyG.traverse(o => {
+    if(o.isMesh && o.material.emissive && !o.material.userData.shared){
+      o.userData._e = o.userData._e || o.material.emissive.getHex();
+      o.material.emissive.setHex(hex);
+      o.material.emissiveIntensity = .9;
+    }
+  });
+  setTimeout(() => u.bodyG.traverse(o => {
+    if(o.isMesh && o.material.emissive && !o.material.userData.shared && o.userData._e !== undefined){
+      o.material.emissive.setHex(o.userData._e);
+      o.material.emissiveIntensity = .35;
+    }
+  }), 180);
+}
+function calcDamage(a, t){
+  let dmg = a.atk;
+  if(G.units.some(s => s.alive && s.side === a.side && s.role === 'support' && manh(s, a) === 1)) dmg += 2;
+  if(t.role === 'defense') dmg = Math.max(1, dmg - 2);
+  return dmg;
+}
+async function animAttack(u, t){
+  u.targetYaw = Math.atan2(t.group.position.x-u.group.position.x, t.group.position.z-u.group.position.z);
+  const isRanged = u.range > 1 && manh(u, t) > 1;
+  if(isRanged){
+    SFX.zap();
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(.13, 10, 10),
+      new THREE.MeshBasicMaterial({ color:0xff8a3d }));
+    ball.position.copy(u.group.position); ball.position.y = .6;
+    fxGroup.add(ball);
+    const from = ball.position.clone();
+    const to = t.group.position.clone(); to.y = .5;
+    await tweenP(220, e => ball.position.lerpVectors(from, to, e));
+    fxGroup.remove(ball); ball.geometry.dispose(); ball.material.dispose();
+    await applyHit(u, t);
+  } else {
+    const from = u.group.position.clone();
+    const to = t.group.position.clone();
+    await tweenP(110, e => u.group.position.lerpVectors(from, to, .35*e));
+    await applyHit(u, t);
+    await tweenP(130, e => u.group.position.lerpVectors(from, to, .35*(1-e)));
+    u.group.position.copy(from);
+  }
+}
+async function applyHit(u, t){
+  SFX.hit();
+  flashUnit(t);
+  const dmg = calcDamage(u, t);
+  popup(t, `-${dmg}`, '#ff5252');
+  await damage(t, dmg, u);
+}
+async function animHeal(u, t){
+  u.targetYaw = Math.atan2(t.group.position.x-u.group.position.x, t.group.position.z-u.group.position.z);
+  SFX.heal();
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.05, .05, 1, 8),
+    new THREE.MeshBasicMaterial({ color:0x6effa0, transparent:true, opacity:.85 }));
+  const a = u.group.position.clone(), b = t.group.position.clone();
+  a.y = b.y = .55;
+  beam.position.lerpVectors(a, b, .5);
+  beam.scale.y = a.distanceTo(b);
+  beam.lookAt(b); beam.rotateX(Math.PI/2);
+  fxGroup.add(beam);
+  await tweenP(320, e => { beam.material.opacity = .85*(1-e); });
+  fxGroup.remove(beam); beam.geometry.dispose(); beam.material.dispose();
+  const heal = Math.min(u.atk, t.maxHp - t.hp);
+  if(heal > 0){
+    t.hp += heal;
+    t.redrawHp();
+    popup(t, `+${heal}`, '#4cd964');
+    updateChips();
+    log(`${emojiOf(u)} ${nameOf(u)} 幫 ${emojiOf(t)} ${nameOf(t)} 回復 ${heal} 血`, u.side);
+  } else {
+    log(`${emojiOf(u)} ${nameOf(u)}：隊友滿血，無事可做`, u.side);
+  }
+}
+async function damage(t, dmg, src){
+  t.hp -= dmg;
+  if(t.hp < 0) t.hp = 0;
+  if(t.redrawHp) t.redrawHp();
+  updateChips();
+  log(`${emojiOf(src)} ${nameOf(src)} 攻擊 ${emojiOf(t)} ${nameOf(t)}，造成 ${dmg} 傷害`, src.side);
+  if(t.hp <= 0) await die(t);
+  if(t.type === 'boss' && t.hp <= 0) gameOver(t.side === 'E' ? 'P' : 'E');
+}
+async function die(u){
+  u.alive = false;
+  SFX.die();
+  puff(u.group.position.clone(), 0xb9c4d8, 12);
+  log(`${emojiOf(u)} ${nameOf(u)} 陣亡了 ⚰️（骰仔已消耗）`, u.side);
+  await tweenP(320, e => u.group.scale.setScalar(Math.max(.001, 1-e)));
+  scene.remove(u.group);
+}
+const emojiOf = u => u.type === 'boss' ? BOSS_DEF[u.side].emoji : ROSTER_MAP[u.type].emoji;
+const nameOf = u => u.type === 'boss' ? BOSS_DEF[u.side].name : ROSTER_MAP[u.type].name;
+
+/* 真・立體彈道：發射向量 = 方位角（360° 任意）× 仰角 elev（5–80°）× 力度 power（1–6）
+   射程 R = power · sin(2·elev)（45° 最遠，高仰角=高拋短打，低仰角=扁平遠飛）
+   每一段都係真正拋物線；落點撞到 bump（任何路徑／怪獸／Boss／半場界線／棋盤邊）
+   → 水平反射彈開再飛一段，能量 ×0.55，直到跌落自由格停低 */
+function isBumperCell(side, x, z){
+  if(!inBoard(x, z)) return true;
+  if(!ownHalfOk(side, z)) return true;
+  if(unitAt(x, z)) return true;
+  if(G.paths.P.has(key(x, z)) || G.paths.E.has(key(x, z))) return true;
+  return false;
+}
+function simulateRoll(side, start, dirV, power, elev){
+  let px = start.x, pz = start.z, dx = dirV.x, dz = dirV.z;
+  let energy = Math.max(1, Math.min(6, +power || 1));
+  const er0 = Math.max(5, Math.min(80, +elev || 30)) * Math.PI/180;
+  const segs = [];
+  let guard = 0;
+  while(guard++ < 6){
+    const er = er0;
+    const R = Math.max(.35, energy * Math.sin(2*er));
+    const tx = px + dx*R, tz = pz + dz*R;
+    const cx = Math.round(tx), cz = Math.round(tz);
+    segs.push({ fx:px, fz:pz, tx, tz, peak: Math.max(.4, R*Math.tan(er)/4) });
+    if(isBumperCell(side, cx, cz)){
+      px = tx; pz = tz;      // 飛到撞擊點，由呢度彈開（拋物線鏈正確銜接）
+      let ndx = dx, ndz = dz;
+      if(Math.abs(dx) >= Math.abs(dz)) ndx = -dx; else ndz = -dz;
+      if(isBumperCell(side, Math.round(px + ndx), Math.round(pz + ndz))){ ndx = -dx; ndz = -dz; }
+      dx = ndx; dz = ndz;
+      energy *= .55;
+      if(energy < .6){
+        // 冇力：撞擊點隔籬最近自由格停低
+        for(const [ox, oz] of [[0,0],[-dx,0],[dx,0],[0,-dz],[0,dz],[1,0],[-1,0],[0,1],[0,-1]]){
+          const qx = Math.round(px) + ox, qz = Math.round(pz) + oz;
+          if(!isBumperCell(side, qx, qz)){
+            return { segs, landing: { x: qx, z: qz }, bounces: guard-1 };
+          }
+        }
+        return { segs, landing: { x: Math.round(start.x), z: Math.round(start.z) }, bounces: guard-1 };
+      }
+      continue;
+    }
+    return { segs, landing: { x: cx, z: cz }, bounces: guard-1 };
+  }
+  return { segs, landing: { x: Math.round(px), z: Math.round(pz) }, bounces: 5 };
+}
+const snap4 = v => Math.abs(v.x) >= Math.abs(v.z)
+  ? { x: Math.sign(v.x) || 1, z: 0 } : { x: 0, z: Math.sign(v.z) || 1 };
+/* 一段拋物線動畫（quadratic bezier：起點→峰→落點） */
+async function flySegment(die, fx, fz, tx, tz, peak){
+  const from = new THREE.Vector3(fx, .3, fz);
+  const to = new THREE.Vector3(tx, .3, tz);
+  const mid = from.clone().lerp(to, .5); mid.y = .3 + peak;
+  const dur = Math.max(260, from.distanceTo(to) * 190);
+  await tweenP(dur, e => {
+    const a = from.clone().lerp(mid, e), b = mid.clone().lerp(to, e);
+    die.position.copy(a.lerp(b, e));
+    die.rotation.x += .3; die.rotation.z += .18;
+  });
+  die.position.copy(to);
+}
+/* 依模擬出嘅彈道鏈飛行（host 實射／guest 重播共用） */
+async function animateDieFlight(die, sim, onBounce){
+  const cells = [];
+  for(let i = 0; i < sim.segs.length; i++){
+    const s = sim.segs[i];
+    await flySegment(die, s.fx, s.fz, s.tx, s.tz, s.peak);
+    if(i < sim.segs.length - 1 && onBounce){
+      onBounce({ x: Math.round(s.tx), z: Math.round(s.tz) });
+    }
+    cells.push({ x: Math.round(s.tx), z: Math.round(s.tz) });
+  }
+  return cells;
+}
+/* 純視覺：guest 重播骰仔飛行（segs 由 host 快照提供，完全一致） */
+async function replayDieRoll(rosterId, from, segs, landing){
+  const die = buildDieMesh(rosterId);
+  die.position.set(from[0] - (W-1)/2, .3, from[1] - (H-1)/2);
+  scene.add(die);
+  SFX.throwD();
+  await animateDieFlight(die, { segs: segs || [] }, () => {
+    puff(die.position.clone(), 0xffffff, 5);
+    SFX.path();
+  });
+  await wait(140);
+  SFX.pop();
+  scene.remove(die); die.geometry.dispose(); die.material.map.dispose(); die.material.dispose();
+}
+/* 彈射擲骰：立體拋物線彈道 → 停低 → 六面全開 → 怪獸出世 */
+async function throwDieFlick(side, rosterId, flick){
+  const start = { x: flick.from[0], z: flick.from[1] };
+  const len = Math.hypot(flick.dir[0], flick.dir[1]) || 1;
+  const dir = { x: flick.dir[0]/len, z: flick.dir[1]/len };
+  const elev = Math.max(5, Math.min(80, +flick.elev || 30));
+  const sim = simulateRoll(side, start, dir, Math.max(1, Math.min(6, flick.power|0)), elev);
+  const landing = sim.landing;
+  const die = buildDieMesh(rosterId);
+  die.position.set(start.x - (W-1)/2, .3, start.z - (H-1)/2);
+  scene.add(die);
+  SFX.throwD();
+  await animateDieFlight(die, sim, c => {
+    puff(new THREE.Vector3(world(c.x, c.z).x, .3, world(c.x, c.z).z), 0xffffff, 5);
+    SFX.path();
+  });
+  await wait(150);
+  SFX.pop();
+  scene.remove(die); die.geometry.dispose(); die.material.map.dispose(); die.material.dispose();
+  const face = Object.assign({}, PATH_FACES[Math.floor(Math.random()*PATH_FACES.length)],
+    { flip: Math.random() < .5 });
+  const added = stampPath(side, landing, face, snap4(dir));
+  renderPathTiles();
+  const T = ROSTER_MAP[rosterId];
+  log(`${side==='P'?'你':'對面'}以 ${Math.round(elev)}° 彈出 ${T.emoji} ${T.name}！${sim.bounces ? `反彈 ${sim.bounces} 次，` : ''}六面攤開【${face.name}】路徑（${added.length} 格）`, side);
+  const u = spawnUnit(side, rosterId, landing.x, landing.z);
+  SFX.spawn();
+  await tweenP(300, e => u.group.scale.setScalar(e));
+  u.group.scale.setScalar(1);
+  revealPathTiles(added);
+  return { unit: u, sim };
+}
+
+/* ============================================================
+   操作（單機=玩家 / 網上=由 host 執行）
+   ============================================================ */
+const canControl = side => {
+  if(G.over) return false;
+  if(G.mode === 'solo') return side === 'P';
+  return side === G.mySide;   // online：只可以控制自己嗰邊（host 執行雙方，guest 只出 intent）
+};
+function select(u){
+  G.selected = u;
+  showHighlights(u);
+  if(u.role !== 'supply'){
+    setHint(u.moved ? '撳紅圈敵人攻擊，或者撳返自己隻怪完成行動'
+                   : '綠格=移動 · 紅圈敵人=攻擊 · 撳自己隻怪=完成行動');
+  }
+}
+function deselect(){
+  G.selected = null;
+  clearHighlights();
+  updateHint();
+}
+function finishUnit(u){
+  u.acted = true;
+  u.stampMesh.visible = true;
+  deselect();
+}
+async function doMoveUnit(u, path){
+  G.busy = true;
+  clearHighlights();
+  await animMove(u, path);
+  u.moved = true;
+  G.busy = false;
+  afterAction(u);
+  broadcast({ anim:{ type:'move', uid:u.uid, path } });
+}
+async function doAttack(u, t){
+  G.busy = true;
+  clearHighlights();
+  if(u.role === 'supply') await animHeal(u, t);
+  else await animAttack(u, t);
+  if(u.alive) finishUnit(u);
+  G.busy = false;
+  deselect();
+  broadcast({ anim:{ type: u.role === 'supply' ? 'heal' : 'attack', uid:u.uid, target:t.uid } });
+}
+function afterAction(u){
+  if(actionTargets(u).length){ select(u); }
+  else finishUnit(u);
+}
+async function doThrow(side, flick){
+  if(G.phase !== 'throw' || G.turnSide !== side) return;
+  if(myUnitsOnBoard(side) >= MAX_BOARD_UNITS) return;
+  const id = flick.id;
+  const i = G.hands[side].indexOf(id);
+  if(i < 0){ renderHand(); return; }
+  const from = { x: flick.from[0], z: flick.from[1] };
+  const dl = Math.hypot(flick.dir[0], flick.dir[1]);
+  if(dl < .01){ renderHand(); return; }
+  const dir = { x: flick.dir[0]/dl, z: flick.dir[1]/dl };
+  const power = Math.max(1, Math.min(6, flick.power|0));
+  const elev = Math.max(5, Math.min(80, +flick.elev || 30));
+  if(!inBoard(from.x, from.z) || !ownHalfOk(side, from.z) || unitAt(from.x, from.z)){
+    renderHand(); return;
+  }
+  G.hands[side].splice(i, 1);
+  G.busy = true;
+  renderHand();
+  const r = await throwDieFlick(side, id, { from: flick.from, dir: [dir.x, dir.z], power, elev });
+  G.busy = false;
+  const u = r ? r.unit : null, sim = r ? r.sim : null;
+  broadcast({ anim:{ type:'flick', id, from: flick.from, dir:[dir.x, dir.z], power, elev, uid: u ? u.uid : 0,
+    segs: sim ? sim.segs.map(s => [s.fx, s.fz, s.tx, s.tz, s.peak]) : [],
+    landing: sim ? [sim.landing.x, sim.landing.z] : flick.from } });
+  toActPhase();
+  broadcast();
+}
+function toActPhase(){
+  if(G.over) return;
+  if(G.aiming) cancelAim();
+  G.phase = 'act';
+  updateChips(); renderHand(); updateHint();
+  show('btnSkip', false); show('btnEnd', canControl(G.turnSide));
+}
+
+/* 撳棋盤 + 彈射瞄準 */
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+let downPos = null;
+let aimDrag = null;   // { startCell, startW, dir, power }
+
+/* 瞄準箭嘴 + 落點預覽 */
+const aimArrow = new THREE.ArrowHelper(
+  new THREE.Vector3(0,0,-1), new THREE.Vector3(0,.6,0), 2, 0xffd166, .5, .35);
+aimArrow.visible = false;
+scene.add(aimArrow);
+const aimGhost = new THREE.Mesh(new THREE.PlaneGeometry(.94, .94),
+  new THREE.MeshBasicMaterial({ color:0xffd166, transparent:true, opacity:.5, depthWrite:false }));
+aimGhost.rotation.x = -Math.PI/2; aimGhost.position.y = .56; aimGhost.visible = false;
+scene.add(aimGhost);
+const aimCurve = new THREE.Line(
+  new THREE.BufferGeometry(),
+  new THREE.LineBasicMaterial({ color:0x6fe3ff, transparent:true, opacity:.85 }));
+aimCurve.visible = false;
+scene.add(aimCurve);
+
+function pickGround(e){
+  const ndc = new THREE.Vector2(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  const pt = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(groundPlane, pt) ? pt : null;
+}
+function cancelAim(){
+  G.aiming = null;
+  aimDrag = null;
+  aimArrow.visible = aimGhost.visible = aimCurve.visible = false;
+  controls.enabled = true;
+  show('btnArc', false);
+  renderHand(); updateHint();
+}
+function arcLabel(){ const e = G.aiming ? G.aiming.elev : 30; return Math.round(e) + '°'; }
+function updateArcUI(){
+  if(!G.aiming){ show('btnArc', false); return; }
+  show('btnArc', true);
+  const e = G.aiming.elev;
+  document.getElementById('btnArc').textContent =
+    `↕ 仰角 ${Math.round(e)}°${e >= 55 ? '（高拋短打）' : e <= 20 ? '（扁平遠飛）' : '（均衡）'}——滾輪調較`;
+}
+function updateAimVisual(){
+  const a = aimDrag;
+  if(!a || !a.power){ aimArrow.visible = aimGhost.visible = aimCurve.visible = false; return; }
+  const elev = G.aiming ? G.aiming.elev : 30;
+  const s0 = world(a.startCell.x, a.startCell.z);
+  const dirV = new THREE.Vector3(a.dir.x, 0, a.dir.z);
+  aimArrow.position.set(s0.x, .6, s0.z);
+  aimArrow.setDirection(dirV);
+  aimArrow.setLength(a.power + .8, .55, .35);
+  aimArrow.setColor(elev >= 55 ? 0x6fe3ff : 0xffd166);
+  aimArrow.visible = true;
+  const sim = simulateRoll(a.side, a.startCell, a.dir, a.power, elev);
+  const lp = world(sim.landing.x, sim.landing.z);
+  aimGhost.position.x = lp.x; aimGhost.position.z = lp.z;
+  aimGhost.visible = true;
+  // 成條彈道鏈預覽（每段拋物線 14 點）
+  const pts = [];
+  for(const s of sim.segs){
+    const from = new THREE.Vector3(s.fx - (W-1)/2, .5, s.fz - (H-1)/2);
+    const to = new THREE.Vector3(s.tx - (W-1)/2, .5, s.tz - (H-1)/2);
+    const mid = from.clone().lerp(to, .5); mid.y = .5 + s.peak;
+    const curve = new THREE.QuadraticBezierCurve3(from, mid, to);
+    const cpts = curve.getPoints(14);
+    if(pts.length) cpts.shift();
+    pts.push(...cpts);
+  }
+  if(pts.length > 1){
+    aimCurve.geometry.dispose();
+    aimCurve.geometry = new THREE.BufferGeometry().setFromPoints(pts);
+    aimCurve.material.color.setHex(elev >= 55 ? 0x6fe3ff : 0xffd166);
+    aimCurve.visible = true;
+  } else aimCurve.visible = false;
+}
+function launchAimed(){
+  const a = G.aiming, d = aimDrag;
+  if(!a || !d || !d.power) return;
+  G.aiming = null;
+  const flick = { id:a.id, from:[d.startCell.x, d.startCell.z], dir:[d.dir.x, d.dir.z],
+    power:d.power, elev:a.elev };
+  aimDrag = null;
+  aimArrow.visible = aimGhost.visible = aimCurve.visible = false;
+  controls.enabled = true;
+  show('btnArc', false);
+  if(G.mode === 'online' && !G.isHost){
+    renderHand(); updateHint();
+    intent(Object.assign({ k:'throw' }, flick));
+    return;
+  }
+  doThrow(a.side, flick);
+}
+/* 3 秒超時：未撳拖曳＝隨機亂彈；拖曳中＝照目前瞄準自動發射 */
+function autoFlickTimeout(){
+  const a = G.aiming;
+  if(!a) return;
+  G.aiming = null;
+  show('btnArc', false);
+  let flick;
+  if(aimDrag && aimDrag.power >= 1){
+    flick = { id:a.id, from:[aimDrag.startCell.x, aimDrag.startCell.z],
+      dir:[aimDrag.dir.x, aimDrag.dir.z], power:aimDrag.power, elev:a.elev };
+    aimDrag = null;
+    aimArrow.visible = aimGhost.visible = aimCurve.visible = false;
+    controls.enabled = true;
+  } else {
+    const side = a.side;
+    const cells = freeCells(side);
+    if(!cells.length){ cancelAim(); return; }
+    const c = cells[Math.floor(Math.random()*cells.length)];
+    const ang = Math.random()*Math.PI*2;
+    flick = { id:a.id, from:[c.x, c.z], dir:[Math.cos(ang), Math.sin(ang)], power:2 + Math.floor(Math.random()*3), elev: 15 + Math.floor(Math.random()*50) };
+    if(aimDrag){ aimDrag = null; aimArrow.visible = aimGhost.visible = aimCurve.visible = false; controls.enabled = true; }
+    banner('⏰ 超時！骰仔自動亂彈');
+  }
+  log('⏰ 3 秒內冇彈射，骰仔自動彈出！', a.side);
+  if(G.mode === 'online' && !G.isHost){
+    renderHand(); updateHint();
+    intent(Object.assign({ k:'throw' }, flick));
+    return;
+  }
+  doThrow(a.side, flick);
+}
+
+renderer.domElement.addEventListener('pointerdown', e => {
+  downPos = { x:e.clientX, y:e.clientY };
+  // 彈射瞄準開始：只可以喺自己半場空格
+  if(G.aiming && !G.busy && G.phase === 'throw'){
+    const cell = pickCell(e);
+    const side = G.aiming.side;
+    if(cell && ownHalfOk(side, cell.z) && !unitAt(cell.x, cell.z)){
+      aimDrag = { side, startCell:cell, dir:{x:0,z:0}, power:0, sx:e.clientX, sy:e.clientY };
+      controls.enabled = false;   // 拖曳瞄準時鎖住鏡頭
+    } else {
+      cancelAim();
+    }
+  }
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if(!aimDrag) return;
+  const g0 = pickGround({ clientX: aimDrag.sx, clientY: aimDrag.sy });
+  const g1 = pickGround(e);
+  if(!g0 || !g1) return;
+  const dx = g1.x - g0.x, dz = g1.z - g0.z;
+  const len = Math.hypot(dx, dz);
+  if(len < .45){ aimDrag.power = 0; updateAimVisual(); return; }
+  // 360° 自由角度（唔再鎖死四向）
+  aimDrag.dir = { x: dx/len, z: dz/len };
+  aimDrag.power = Math.max(1, Math.min(6, Math.round(len)));
+  updateAimVisual();
+});
+/* 滾輪 / Q：調較仰角（上下，5–80°） */
+renderer.domElement.addEventListener('wheel', e => {
+  if(!G.aiming) return;
+  e.preventDefault();
+  G.aiming.elev = Math.max(5, Math.min(80, G.aiming.elev + (e.deltaY < 0 ? 3 : -3)));
+  updateArcUI();
+  updateAimVisual();
+}, { passive:false });
+addEventListener('keydown', e => {
+  if(e.code === 'Escape'){ if(G.aiming) cancelAim(); else deselect(); }
+  if((e.code === 'KeyQ') && G.aiming){
+    G.aiming.elev = G.aiming.elev >= 45 ? 15 : 60;
+    updateArcUI();
+    updateAimVisual();
+  }
+});
+document.getElementById('btnArc').addEventListener('click', () => {
+  if(!G.aiming) return;
+  G.aiming.elev = G.aiming.elev >= 45 ? 15 : 60;
+  updateArcUI();
+  updateAimVisual();
+});
+renderer.domElement.addEventListener('pointerup', e => {
+  if(aimDrag){
+    const a = aimDrag;
+    downPos = null;
+    if(a.power >= 1){ launchAimed(); return; }
+    cancelAim();   // 拖得太短 = 取消
+    return;
+  }
+  if(!downPos) return;
+  const dist = Math.hypot(e.clientX-downPos.x, e.clientY-downPos.y);
+  downPos = null;
+  if(dist < 7) onBoardClick(e);
+});
+function pickCell(e){
+  const ndc = new THREE.Vector2(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  const pt = new THREE.Vector3();
+  if(!raycaster.ray.intersectPlane(groundPlane, pt)) return null;
+  const x = Math.round(pt.x + (W-1)/2), z = Math.round(pt.z + (H-1)/2);
+  return inBoard(x, z) ? { x, z } : null;
+}
+function onBoardClick(e){
+  SFX.ensure();
+  if(G.busy || G.over) return;
+  if(G.mode === 'solo' && G.phase === 'ai') return;
+  if(!canControl(G.turnSide) || (G.phase !== 'act')) return;
+  const guest = G.mode === 'online' && !G.isHost;   // guest：本地只預覽，動作交 host 執行
+  const cell = pickCell(e);
+  if(!cell){ deselect(); return; }
+  const u = unitAt(cell.x, cell.z);
+  if(u && u.side === G.turnSide && !u.acted && u !== G.selected){ select(u); return; }
+  const s = G.selected;
+  if(s && s.alive){
+    if(u && u.side !== s.side && s.role !== 'supply' && manh(s, u) <= s.range){
+      if(guest){ intent({ k:'attack', uid:s.uid, target:u.uid }); deselect(); }
+      else doAttack(s, u);
+      return;
+    }
+    if(u && u.side === s.side && s.role === 'supply' && u !== s && manh(s, u) <= s.range){
+      if(guest){ intent({ k:'attack', uid:s.uid, target:u.uid }); deselect(); }
+      else doAttack(s, u);
+      return;
+    }
+    if(!u && !s.moved && G.moveSet.has(key(cell.x, cell.z))){
+      const path = G.moveSet.get(key(cell.x, cell.z));
+      if(guest){ intent({ k:'move', uid:s.uid, path: path.map(c => [c.x, c.z]) }); deselect(); }
+      else doMoveUnit(s, path);
+      return;
+    }
+    if(u === s){ finishUnit(s); return; }
+  }
+  if(!u) deselect();
+}
+addEventListener('keydown', e => {
+  if(e.code === 'Escape'){ if(G.aiming) cancelAim(); else deselect(); }
+});
+
+/* ============================================================
+   HUD
+   ============================================================ */
+const handEl = document.getElementById('hand');
+function renderHand(){
+  const side = G.mode === 'online' && !G.isHost ? 'E' : 'P';
+  const canThrow = G.phase === 'throw' && G.turnSide === side && !G.busy
+    && canControl(side) && freeCells(side).length > 0 && myUnitsOnBoard(side) < MAX_BOARD_UNITS;
+  handEl.innerHTML = G.hands[side].map((id, i) => {
+    const T = ROSTER_MAP[id], R = ROLES[T.role];
+    let cls = canThrow ? '' : 'disabled';
+    if(G.aiming) cls = (G.aiming.id === id) ? 'sel' : 'disabled';
+    return `<div class="die ${cls}" data-i="${i}" title="${R.skill}">
+      <div class="em">${T.emoji}</div>
+      <div class="nm">${T.name}</div>
+      <div class="role" style="background:#${R.color.toString(16).padStart(6,'0')}">${R.label}</div>
+      <div class="st">❤️${T.hp} ⚔️${T.atk}<br>👟${T.move} 🎯${T.range}</div>
+      <div class="sk">${R.skill}</div>
+    </div>`;
+  }).join('');
+  handEl.querySelectorAll('.die').forEach(el => {
+    el.addEventListener('click', async () => {
+      if(G.phase !== 'throw' || G.busy) return;
+      const side = G.mode === 'online' && !G.isHost ? 'E' : 'P';
+      if(!canControl(side) || G.turnSide !== side) return;
+      SFX.ensure();
+      const id = G.hands[side][+el.dataset.i];
+      // 進入彈射瞄準模式（3 秒倒數開始）
+      G.aiming = { id, side, elev: 30, deadline: performance.now() + 3000 };
+      renderHand();
+      updateArcUI();
+      setHint('🎯 拖曳＝方位角(360°)＋力度(1–6) · 滾輪/Q＝仰角（45°最遠・高角度短打） · 落點撞路徑會反彈 · 3秒內發射！');
+    });
+  });
+}
+function setHint(t){ document.getElementById('hintText').textContent = t; }
+function updateHint(){
+  const side = G.mode === 'online' && !G.isHost ? 'E' : 'P';
+  if(G.phase === 'menu') { setHint('…'); return; }
+  if(G.over){ setHint('分出勝負了！'); return; }
+  if(G.mode === 'solo' && G.phase === 'ai'){ setHint('魔王軍團行動中…'); return; }
+  if(G.turnSide !== side){ setHint('等對方行動…'); return; }
+  if(G.phase === 'throw') setHint('撳一粒骰仔 → 喺自己半場撳住空格拖曳瞄準、放手彈射！方向決定路徑伸延方向');
+  else setHint('撳自己怪獸 → 綠格移動 · 紅圈攻擊 · 補給兵綠圈補血 · 搞掂撳「結束回合」');
+}
+function updateChips(){
+  const bp = G.units.find(u => u.type === 'boss' && u.side === 'P');
+  const be = G.units.find(u => u.type === 'boss' && u.side === 'E');
+  if(bp) document.getElementById('chipBossP').textContent = `🐉 龍王 ❤️${bp.hp}/${bp.maxHp}`;
+  if(be) document.getElementById('chipBossE').textContent = `😈 魔王 ❤️${be.hp}/${be.maxHp}`;
+  const myViewSide = G.mode === 'online' ? G.mySide : 'P';
+  const who = G.turnSide === myViewSide ? '你的' : (G.mode === 'solo' ? '魔王軍' : '對方');
+  const ph = { throw:'擲骰', act:'行動', ai:'魔王軍', over:'結束', menu:'準備' }[G.phase] || '';
+  document.getElementById('chipTurn').textContent = `第 ${G.turn} 回合 · ${who}${G.over ? '' : '·'+ph}`;
+}
+const logEl = document.getElementById('log');
+function log(text, side){
+  const d = document.createElement('div');
+  if(side === 'E') d.className = 'e';
+  d.textContent = text;
+  logEl.prepend(d);
+  while(logEl.children.length > 8) logEl.lastChild.remove();
+}
+function renderLogFromSnap(lines){
+  logEl.innerHTML = '';
+  for(const [t, s] of lines.slice(-8)){
+    const d = document.createElement('div');
+    if(s === 'E') d.className = 'e';
+    d.textContent = t;
+    logEl.appendChild(d);
+  }
+}
+function banner(text){
+  const b = document.getElementById('banner');
+  b.textContent = text;
+  b.classList.remove('show');
+  void b.offsetWidth;
+  b.classList.add('show');
+}
+function show(id, v){ document.getElementById(id).style.display = v ? '' : 'none'; }
+
+document.getElementById('btnSkip').addEventListener('click', () => {
+  if(G.phase !== 'throw' || G.busy) return;
+  SFX.ensure();
+  const side = G.turnSide;
+  if(G.mode === 'online' && !G.isHost){ intent({ k:'skip' }); return; }
+  toActPhase(); broadcast();
+});
+document.getElementById('btnEnd').addEventListener('click', async () => {
+  if(G.phase !== 'act' || G.busy) return;
+  SFX.ensure();
+  if(G.mode === 'online' && !G.isHost){ intent({ k:'end' }); return; }
+  deselect();
+  await endTurnFlow();
+});
+
+/* ============================================================
+   回合流轉
+   ============================================================ */
+async function endTurnFlow(){
+  if(G.mode === 'solo'){
+    G.phase = 'ai'; G.turnSide = 'E';
+    updateChips(); renderHand(); updateHint();
+    show('btnEnd', false); show('btnSkip', false);
+    await aiTurn();
+    if(!G.over) startTurn('P');
+  } else {
+    // online：host 收到雙方 end 都會叫呢度；下一步交俾對面
+    startTurn(G.turnSide === 'P' ? 'E' : 'P');
+  }
+  broadcast();
+}
+function startTurn(side, isFirst){
+  if(G.over) return;
+  G.turnSide = side;
+  G.phase = 'throw';
+  if(side === 'P' && !isFirst && G.started) G.turn++;
+  G.started = true;
+  if(!isFirst) drawDice(side, TURN_DRAW);
+  for(const u of G.units) if(u.side === side){ u.acted = false; u.moved = false; u.stampMesh.visible = false; }
+  banner(side === 'P' ? '你嘅回合' : (G.mode === 'solo' ? '魔王軍回合' : '對方回合'));
+  updateChips(); renderHand(); updateHint();
+  const meTurn = canControl(side);
+  show('btnSkip', meTurn && freeCells(side).length && G.hands[side].length);
+  show('btnEnd', false);
+  if(!G.hands[side].length || !freeCells(side).length) toActPhase();
+  broadcast();
+}
+
+/* ============================================================
+   AI（單機）
+   ============================================================ */
+function pickAITarget(u){
+  let best = null, bd = 1e9;
+  for(const t of G.units){
+    if(!t.alive || t.side === u.side) continue;
+    const d = manh(u, t)*10 + (t.type === 'boss' ? 3 : 0);
+    if(d < bd){ bd = d; best = t; }
+  }
+  return best;
+}
+function pickAttackTarget(u, list){
+  const killable = list.filter(t => t.hp <= calcDamage(u, t) && t.type !== 'boss');
+  if(killable.length) return killable.sort((a,b) => a.hp-b.hp)[0];
+  const boss = list.find(t => t.type === 'boss');
+  if(boss && boss.hp <= calcDamage(u, boss)) return boss;
+  return list.sort((a,b) => a.hp-b.hp)[0];
+}
+async function aiAct(u){
+  if(!u.alive || u.acted) return;
+  window.__dbg = window.__dbg || [];
+  __dbg.push(`aiAct ${u.role}@${u.x},${u.z}`);
+  // 補給：醫最傷嘅友軍
+  if(u.role === 'supply'){
+    let allies = actionTargets(u).filter(t => t.hp < t.maxHp);
+    if(!allies.length && u.move > 0){
+      const wounded = G.units.filter(t => t.alive && t.side === u.side && t.hp < t.maxHp && t !== u)
+        .sort((a,b) => a.hp/a.maxHp - b.hp/b.maxHp)[0];
+      if(wounded){
+        const reach = bfsReach(u);
+        let best = null, bs = 1e9;
+        for(const [k, path] of reach){
+          const [x, z] = k.split(',').map(Number);
+          const d = Math.abs(wounded.x-x) + Math.abs(wounded.z-z);
+          const s = d*10 + path.length;
+          if(s < bs){ bs = s; best = path; }
+        }
+        if(best && best.length) await animMove(u, best);
+        u.moved = true;
+        allies = actionTargets(u).filter(t => t.hp < t.maxHp);
+      }
+    }
+    if(allies.length){
+      const t = allies.sort((a,b) => a.hp/a.maxHp - b.hp/b.maxHp)[0];
+      await wait(200);
+      await animHeal(u, t);
+    }
+    u.acted = true; u.stampMesh.visible = true;
+    return;
+  }
+  // 輔助：貼住最近嘅攻擊型友軍
+  if(u.role === 'support'){
+    const buddy = G.units.filter(t => t.alive && t.side === u.side && t.type !== 'boss' &&
+      (t.role === 'melee' || t.role === 'ranged'))
+      .sort((a,b) => manh(u,a) - manh(u,b))[0];
+    if(buddy && manh(u, buddy) > 1){
+      const reach = bfsReach(u);
+      let best = null, bs = 1e9;
+      for(const [k, path] of reach){
+        const [x, z] = k.split(',').map(Number);
+        const s = (Math.abs(buddy.x-x) + Math.abs(buddy.z-z))*10 + path.length;
+        if(s < bs){ bs = s; best = path; }
+      }
+      if(best && best.length) await animMove(u, best);
+    }
+    u.moved = true;
+    const foes = actionTargets(u);
+    if(foes.length){ await wait(200); await animAttack(u, pickAttackTarget(u, foes)); }
+    u.acted = true; u.stampMesh.visible = true;
+    return;
+  }
+  // 近攻/遠攻/防守
+  let targets = actionTargets(u);
+  if(!targets.length && u.move > 0){
+    const target = pickAITarget(u);
+    if(target){
+      const reach = bfsReach(u);
+      let bestPath = null, bs = 1e9;
+      for(const [k, path] of reach){
+        const [x, z] = k.split(',').map(Number);
+        const dAfter = Math.abs(target.x-x) + Math.abs(target.z-z);
+        const inRng = dAfter <= u.range ? -100 : 0;
+        const s = dAfter*10 + inRng + path.length;
+        if(s < bs){ bs = s; bestPath = path; }
+      }
+      if(bestPath && bestPath.length) await animMove(u, bestPath);
+      u.moved = true;
+    }
+    targets = actionTargets(u);
+  }
+  if(targets.length){
+    const t = pickAttackTarget(u, targets);
+    await wait(220);
+    await animAttack(u, t);
+  }
+  u.acted = true;
+  u.stampMesh.visible = true;
+}
+async function aiTurn(){
+  await wait(900);
+  if(G.hands.E.length && freeCells('E').length && myUnitsOnBoard('E') < MAX_BOARD_UNITS){
+    const idx = Math.floor(Math.random()*G.hands.E.length);
+    const id = G.hands.E[idx];
+    G.hands.E.splice(idx, 1);
+    const cells = freeCells('E');
+    const start = cells[Math.floor(Math.random()*cells.length)];
+    const ang = (Math.random()-.5) * .9;             // 主要向南，帶隨機偏角
+    const dir = { x: Math.sin(ang), z: Math.cos(ang) };
+    const power = 2 + Math.floor(Math.random()*4);
+    const elev = 20 + Math.floor(Math.random()*35);
+    await throwDieFlick('E', id, { from:[start.x,start.z], dir:[dir.x,dir.z], power, elev });
+    await wait(300);
+  }
+  const order = G.units.filter(u => u.side === 'E' && u.alive && u.type !== 'boss')
+    .sort((a,b) => b.z - a.z);
+  for(const u of order){
+    if(G.over) return;
+    await aiAct(u);
+    await wait(280);
+  }
+  const boss = G.units.find(u => u.type === 'boss' && u.side === 'E');
+  if(boss && boss.alive && !G.over){
+    const foes = actionTargets(boss);
+    if(foes.length) await aiAct(boss);
+  }
+  await wait(250);
+}
+
+/* ============================================================
+   勝負
+   ============================================================ */
+function gameOver(winner){
+  if(G.over) return;
+  G.over = true; G.phase = 'over';
+  updateChips(); updateHint(); renderHand();
+  const win = G.mode === 'online' ? winner === G.mySide : winner === 'P';
+  if(win) SFX.win(); else SFX.lose();
+  banner(win ? '🏆 勝利！' : '💀 戰敗…');
+  for(let i = 0; i < 36; i++){
+    puff(new THREE.Vector3((Math.random()-.5)*4, .5+Math.random()*1.5, (Math.random()-.5)*5),
+      win ? 0xffd166 : 0x60708c, 2);
+  }
+  setTimeout(() => {
+    document.getElementById('overlay').innerHTML = `
+      <div class="cardO">
+        <div class="emoji">${win ? '🏆' : '💀'}</div>
+        <h2>${win ? '勝利！' : '戰敗…'}</h2>
+        <div class="rules" style="text-align:center">總共打咗 ${G.turn} 個回合</div>
+        <button class="act blue" onclick="location.reload()">再玩一局 ↺</button>
+      </div>`;
+    document.getElementById('overlay').classList.remove('hidden');
+  }, 1400);
+  broadcast({ over:true, winner });
+}
+
+/* ============================================================
+   網上對戰（PeerJS，host 權威）
+   ============================================================ */
+let peer = null, conn = null;
+const ROOM_PREFIX = 'mdice-v2-';
+function makeRoomCode(){
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for(let i = 0; i < 5; i++) s += chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function netStatus(t){ document.getElementById('netStatus').textContent = t; document.getElementById('netStatus2').textContent = t; }
+function startHost(){
+  if(typeof Peer === 'undefined'){ netStatus('⚠️ PeerJS 載入失敗，請檢查網絡'); return; }
+  const code = makeRoomCode();
+  document.getElementById('roomCodeShow').textContent = code;
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('netOverlay').classList.remove('hidden');
+  netStatus('經營房間中…');
+  peer = new Peer(ROOM_PREFIX + code, { debug:1 });
+  peer.on('open', () => netStatus(`房間碼【${code}】— 等對手加入…（組埋個 code 俾朋友）`));
+  peer.on('error', e => {
+    netStatus('⚠️ 連線錯誤：' + e.type);
+    if(e.type === 'unavailable-id') startHost();
+  });
+  peer.on('connection', c => {
+    if(conn){ c.close(); return; }
+    conn = c;
+    conn.on('open', () => {
+      document.getElementById('netOverlay').classList.add('hidden');
+      beginOnline(true);
+    });
+    conn.on('data', m => onNetMsg(m));
+    conn.on('close', () => peerLeft());
+  });
+}
+function startJoin(code){
+  if(typeof Peer === 'undefined'){ netStatus('⚠️ PeerJS 載入失敗，請檢查網絡'); return; }
+  netStatus('連線中…');
+  peer = new Peer({ debug:1 });
+  peer.on('open', () => {
+    conn = peer.connect(ROOM_PREFIX + code.toUpperCase(), { reliable:true });
+    conn.on('open', () => {
+      document.getElementById('overlay').classList.add('hidden');
+      document.getElementById('netOverlay').classList.add('hidden');
+      beginOnline(false);
+    });
+    conn.on('data', m => onNetMsg(m));
+    conn.on('close', () => peerLeft());
+  });
+  peer.on('error', e => netStatus('⚠️ 連線失敗：' + (e.type === 'peer-unavailable' ? '搵唔到呢個房間碼' : e.type)));
+}
+function peerLeft(){
+  if(G.over) return;
+  G.over = true; G.phase = 'over';
+  document.getElementById('overlay').innerHTML = `
+    <div class="cardO"><div class="emoji">📴</div><h2>對方已斷線</h2>
+    <button class="act blue" onclick="location.reload()">返回大廳 ↺</button></div>`;
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function beginOnline(isHost){
+  G.mode = 'online'; G.isHost = isHost; G.mySide = isHost ? 'P' : 'E';
+  if(isHost){
+    setupGame();
+    startTurn('P', true);   // 首回合唔使額外抽牌
+  } else {
+    camera.position.set(0, 16.5, -14.5);
+    controls.target.set(0, 0, -.5);
+    G.phase = 'throw'; G.turnSide = 'P';
+    renderHand(); updateHint(); updateChips();   // 等 host 第一個快照
+  }
+  banner(isHost ? '你係龍王方（下方）' : '你係魔王方（上方）');
+}
+/* intent：guest → host */
+function intent(m){ if(G.mode === 'online' && !G.isHost && conn && conn.open){ m.t = 'i'; conn.send(m); } }
+function broadcast(extra){
+  if(G.mode !== 'online' || !G.isHost || !conn || !conn.open) return;
+  const snap = makeSnapshot(extra && extra.anim);
+  try { conn.send(snap); } catch(e) {}
+}
+/* 快照序列化處理，避免動畫重疊資源競爭 */
+let snapQueue = Promise.resolve();
+function onNetMsg(m){
+  if(!m) return;
+  if(m.t === 'i' && G.isHost){
+    // host 代敵方（E）執行 intent
+    if(G.over) return;
+    if(G.turnSide !== 'E') return;
+    if(m.k === 'throw' && G.phase === 'throw' && !G.busy){
+      doThrow('E', { id:m.id, from:m.from, dir:m.dir, power:m.power, elev:m.elev });
+    } else if(m.k === 'skip' && G.phase === 'throw' && !G.busy){
+      toActPhase(); broadcast();
+    } else if(m.k === 'move' && G.phase === 'act' && !G.busy){
+      const u = byUid(m.uid);
+      if(u && u.side === 'E' && !u.acted && !u.moved){
+        const path = (m.path || []).map(([x,z]) => ({ x, z }));
+        if(path.length) doMoveUnit(u, path);
+      }
+    } else if(m.k === 'attack' && G.phase === 'act' && !G.busy){
+      const u = byUid(m.uid), t = byUid(m.target);
+      if(u && t && u.side === 'E' && !u.acted && actionTargets(u).includes(t)) doAttack(u, t);
+    } else if(m.k === 'end' && G.phase === 'act' && !G.busy){
+      endTurnFlow();
+    }
+  } else if(m.t === 'snap' && !G.isHost){
+    snapQueue = snapQueue.then(() => applySnapshot(m)).catch(e => window.__errs && window.__errs.push('snap:' + e));
+  }
+}
+function makeSnapshot(anim){
+  return {
+    t:'snap', turn:G.turn, turnSide:G.turnSide, phase:G.phase, over:G.over,
+    hand: G.hands.E.slice(),
+    deckLeft: G.decks.E.length,
+    units: G.units.map(u => ({ uid:u.uid, side:u.side, type:u.type, x:u.x, z:u.z,
+      hp:u.hp, maxHp:u.maxHp, acted:u.acted, moved:u.moved, alive:u.alive })),
+    paths: { P:[...G.paths.P], E:[...G.paths.E] },
+    logLines: [...logEl.children].reverse().map(d => [d.textContent, d.className.includes('e') ? 'E' : 'P']),
+    anim: anim || null,
+  };
+}
+async function applySnapshot(s){
+  const prevTurn = G.turn !== s.turn || G.turnSide !== s.turnSide;
+  G.turn = s.turn; G.turnSide = s.turnSide; G.phase = s.phase;
+  G.hands.E = s.hand || [];
+  G.paths.P = new Set(s.paths.P); G.paths.E = new Set(s.paths.E);
+  renderPathTiles();
+  if(prevTurn && !s.over && !G.over){
+    banner(s.turnSide === 'E' ? '你嘅回合' : '對方回合');
+  }
+  // 動畫提示（遠端動作重播）
+  if(s.anim && !s.anim.done){
+    s.anim.done = true;
+    if(s.anim.type === 'move'){
+      const u = byUid(s.anim.uid);
+      if(u && u.alive){
+        const path = s.anim.path ? s.anim.path.map(([x,z]) => ({x,z})) : [];
+        if(path.length) await animMove(u, path);
+      }
+    } else if(s.anim.type === 'attack'){
+      const u = byUid(s.anim.uid), t = byUid(s.anim.target);
+      if(u && t && u.alive && t.alive) await animAttack(u, t);
+    } else if(s.anim.type === 'heal'){
+      const u = byUid(s.anim.uid), t = byUid(s.anim.target);
+      if(u && t && u.alive && t.alive) await animHeal(u, t);
+    } else if(s.anim.type === 'flick'){
+      const segs = (s.anim.segs || []).map(a => ({ fx:a[0], fz:a[1], tx:a[2], tz:a[3], peak:a[4] }));
+      await replayDieRoll(s.anim.id, s.anim.from, segs, s.anim.landing || s.anim.from);
+    } else if(s.anim.type === 'spawn'){
+      await wait(300);
+    }
+  }
+  // 同步單位
+  const seen = new Set();
+  for(const us of s.units){
+    let u = byUid(us.uid);
+    if(u && !u.alive && !us.alive){ /* 都係死咗 */ }
+    if(!u || (u.type !== us.type)){
+      if(u){ scene.remove(u.group); G.units = G.units.filter(x => x !== u); }
+      u = spawnUnit(us.side, us.type, us.x, us.z, us.uid);
+      u.group.scale.setScalar(1);
+    }
+    seen.add(us.uid);
+    u.x = us.x; u.z = us.z;
+    u.hp = us.hp; u.maxHp = us.maxHp;
+    u.acted = us.acted; u.moved = us.moved;
+    u.alive = us.alive;
+    const p = world(u.x, u.z);
+    if(!s.anim || s.anim.type !== 'move' || s.anim.uid !== us.uid) u.group.position.set(p.x, 0, p.z);
+    u.group.visible = us.alive;
+    if(u.redrawHp) u.redrawHp();
+    u.stampMesh.visible = u.acted;
+  }
+  for(const u of [...G.units]){
+    if(!seen.has(u.uid)){
+      scene.remove(u.group);
+      G.units = G.units.filter(x => x !== u);
+    }
+  }
+  renderLogFromSnap(s.logLines || []);
+  updateChips(); renderHand(); updateHint();
+  show('btnSkip', G.phase === 'throw' && G.turnSide === 'E' && !G.over && freeCells('E').length && G.hands.E.length);
+  show('btnEnd', G.phase === 'act' && G.turnSide === 'E' && !G.over);
+  if(s.over && !G._overShown){
+    G._overShown = true;
+    gameOver(s.winner);   // gameOver 會自己設 G.over / phase / overlay
+  }
+  G.over = G.over || !!s.over;
+}
+
+/* ============================================================
+   主迴圈
+   ============================================================ */
+const clock = new THREE.Clock();
+let cdLastSec = null;
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), .05);
+  const t = clock.elapsedTime;
+  stepTweens(performance.now());
+  updatePopups(dt);
+  updatePuffs(dt);
+  // 3 秒倒數
+  const cd = document.getElementById('countdown');
+  if(G.aiming && !G.over){
+    cd.style.display = 'flex';
+    const rem = Math.max(0, G.aiming.deadline - performance.now());
+    const sec = Math.ceil(rem/1000);
+    const num = document.getElementById('cdNum');
+    num.textContent = sec;
+    num.classList.toggle('urgent', rem <= 1200);
+    document.getElementById('cdBarFill').style.width = (rem/3000*100) + '%';
+    if(sec !== cdLastSec){ cdLastSec = sec; if(sec <= 3 && sec > 0) SFX.path(); }
+    if(rem <= 0 && !G.busy){ cdLastSec = null; autoFlickTimeout(); }
+  } else { cd.style.display = 'none'; cdLastSec = null; }
+  moveTiles.forEach(m => { if(m.visible) m.material.opacity = .3 + Math.sin(t*4)*.15; });
+  targetRings.forEach(m => { if(m.visible) m.scale.setScalar(1 + Math.sin(t*5)*.08); });
+  boardGroup.children.forEach(c => { if(c.userData.pulse) c.material.emissiveIntensity = .45 + Math.sin(t*2.2)*.2; });
+  for(const u of G.units){
+    if(!u.alive) continue;
+    let dy = u.targetYaw - u.yaw;
+    dy = ((dy + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI;
+    u.yaw += dy*.2;
+    u.bodyG.rotation.y = u.yaw;
+    u.bodyG.position.y = Math.sin(t*2.5 + u.x)*.02;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ============================================================
+   大廳
+   ============================================================ */
+function lobby(){
+  G.mode = null; G.phase = 'menu';
+  updateHint();
+}
+document.getElementById('btnSolo').addEventListener('click', () => {
+  SFX.ensure();
+  document.getElementById('overlay').classList.add('hidden');
+  G.mode = 'solo'; G.mySide = 'P'; G.isHost = true;
+  setupGame();
+  startTurn('P', true);
+});
+document.getElementById('btnNetHost').addEventListener('click', () => { SFX.ensure(); startHost(); });
+document.getElementById('btnNetJoin').addEventListener('click', () => {
+  SFX.ensure();
+  document.getElementById('joinRow').classList.remove('hidden');
+  document.getElementById('roomInput').focus();
+});
+document.getElementById('btnJoinBack').addEventListener('click', () => {
+  document.getElementById('joinRow').classList.add('hidden');
+});
+document.getElementById('btnJoinGo').addEventListener('click', () => {
+  const code = document.getElementById('roomInput').value.trim().toUpperCase();
+  if(code.length !== 5){ netStatus('房間碼要 5 個字'); return; }
+  startJoin(code);
+});
+document.getElementById('btnNetCancel').addEventListener('click', () => {
+  try{ peer && peer.destroy(); }catch(e){}
+  peer = null; conn = null;
+  document.getElementById('netOverlay').classList.add('hidden');
+  document.getElementById('overlay').classList.remove('hidden');
+});
+
+lobby();
+window.__G = G;
+window.__game = { bfsReach, actionTargets, throwDieFlick, doThrow, doMoveUnit, doAttack, startTurn,
+  snapshot: makeSnapshot, simulateRoll,
+  screenOf(x, z){ const w = world(x, z); const p = new THREE.Vector3(w.x, 0, w.z).project(camera);
+    return { x: Math.round((p.x+1)/2*innerWidth), y: Math.round((-p.y+1)/2*innerHeight) }; } };
+</script>
+</body>
+</html>
